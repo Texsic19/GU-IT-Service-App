@@ -1,25 +1,14 @@
 import streamlit as st
 import re
-from db import run_query, run_insert
+from db import run_insert
 from ai_utils import ai_categorize_ticket
-from auth import logout_button, role_badge, require_login
-from icons import icon, icon_text, icon_header
-from nav import apply_nav_visibility
-
-st.set_page_config(page_title="Submit a Ticket", page_icon="📝", layout="wide")
-
-require_login()
-role_badge()
-logout_button()
-apply_nav_visibility()
+from icons import icon_header, icon_text
 
 st.markdown(icon_header("send", "Submit a Support Ticket", level=1), unsafe_allow_html=True)
 st.markdown(
     f'<p style="color:#6b7280;margin-top:0">'
     f'{icon_text("sparkles", "Our AI will automatically categorize and prioritize your ticket.", 14, "#6b7280")}'
-    f'</p>',
-    unsafe_allow_html=True
-)
+    f'</p>', unsafe_allow_html=True)
 st.divider()
 
 with st.form("submit_ticket_form", clear_on_submit=True):
@@ -42,19 +31,15 @@ with st.form("submit_ticket_form", clear_on_submit=True):
             f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;'
             f'padding:10px 14px;font-size:0.85rem;color:#166534;margin-bottom:8px">'
             f'{icon_text("bot", "AI will auto-detect category & priority", 14, "#166534")}'
-            f'</div>',
-            unsafe_allow_html=True
-        )
+            f'</div>', unsafe_allow_html=True)
         manual_category = st.selectbox("Category (optional override)",
             ["Auto-detect 🤖", "Network", "Hardware", "Software",
              "Account/Access", "AV Equipment", "Email", "Printing", "General"])
         manual_priority = st.selectbox("Priority (optional override)",
             ["Auto-detect 🤖", "Low", "Medium", "High", "Critical"])
 
-    description = st.text_area(
-        "Describe your issue *", height=150,
-        placeholder="Describe the problem in detail. Include what you were doing, any error messages, and what you've already tried."
-    )
+    description = st.text_area("Describe your issue *", height=150,
+        placeholder="Describe the problem in detail. Include what you were doing, any error messages, and what you've already tried.")
 
     submitted = st.form_submit_button("Submit Ticket", use_container_width=True, type="primary")
 
@@ -82,30 +67,22 @@ if submitted:
                 priority       = ai_result.get("priority", "Medium")  if manual_priority == "Auto-detect 🤖" else manual_priority
                 ai_categorized = True
             else:
-                category       = manual_category
-                priority       = manual_priority
-                ai_categorized = False
+                category, priority, ai_categorized = manual_category, manual_priority, False
 
             ticket_id = run_insert("""
                 INSERT INTO tickets
                     (title, description, status, priority, category,
-                     submitter_name, submitter_email,
-                     ai_suggested_fix, ai_categorized, location)
+                     submitter_name, submitter_email, ai_suggested_fix, ai_categorized, location)
                 VALUES (%s, %s, 'Open', %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """, (title.strip(), description.strip(), priority, category,
                   submitter_name.strip(), submitter_email.strip().lower(),
-                  None, ai_categorized,
-                  location.strip() if location else None))
+                  None, ai_categorized, location.strip() if location else None))
 
-        # Success banner
         st.markdown(
-            f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:12px;'
-            f'padding:1.25rem;margin-bottom:1rem">'
+            f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:1.25rem;margin-bottom:1rem">'
             f'{icon_text("check-circle", f"Ticket #{ticket_id} submitted successfully!", 20, "#15803d")}'
-            f'</div>',
-            unsafe_allow_html=True
-        )
+            f'</div>', unsafe_allow_html=True)
 
         col_a, col_b, col_c = st.columns(3)
         with col_a:
@@ -123,5 +100,4 @@ if submitted:
                 f'<div style="background:#f0fdf4;border-radius:8px;padding:12px;font-size:0.9rem">'
                 f'{icon_text("clock", "Status: Open", 14, "#15803d")}'
                 f'</div>', unsafe_allow_html=True)
-
         st.balloons()

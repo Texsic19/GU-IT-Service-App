@@ -1,15 +1,7 @@
 import streamlit as st
 import re
 from db import run_query, run_insert
-from auth import require_staff, logout_button, role_badge
 from icons import icon_header, icon_text
-from nav import apply_nav_visibility
-
-st.set_page_config(page_title="Manage Users", page_icon="👥", layout="wide")
-require_staff()
-role_badge()
-logout_button()
-apply_nav_visibility()
 
 st.markdown(icon_header("users", "Manage Users", level=1), unsafe_allow_html=True)
 st.markdown('<p style="color:#6b7280;margin-top:0">Add and manage students, staff, and faculty.</p>', unsafe_allow_html=True)
@@ -25,25 +17,21 @@ with st.expander("Add New User", expanded=False):
         with c2:
             last_name = st.text_input("Last Name *")
             phone     = st.text_input("Phone", placeholder="509-555-0100")
-            role      = st.selectbox("Role *", ["student", "staff", "faculty"])
-
+            role      = st.selectbox("Role *", ["student","staff","faculty"])
         if st.form_submit_button("Add User", type="primary"):
             errors = []
             if not first_name.strip(): errors.append("First name required.")
             if not last_name.strip():  errors.append("Last name required.")
             if not email.strip():      errors.append("Email required.")
-            elif not re.match(r"[^@]+@[^@]+\.[^@]+", email): errors.append("Invalid email format.")
+            elif not re.match(r"[^@]+@[^@]+\.[^@]+", email): errors.append("Invalid email.")
             if phone and not re.match(r"^\d{3}[-.\s]?\d{3}[-.\s]?\d{4}$", phone.replace(" ","")):
                 errors.append("Phone must be 10 digits.")
             if errors:
                 for e in errors: st.error(e)
             else:
                 try:
-                    run_insert("""
-                        INSERT INTO users (first_name,last_name,email,phone,department,role)
-                        VALUES (%s,%s,%s,%s,%s,%s) RETURNING id
-                    """, (first_name.strip(), last_name.strip(), email.strip().lower(),
-                          phone.strip() or None, department.strip() or None, role))
+                    run_insert("INSERT INTO users (first_name,last_name,email,phone,department,role) VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
+                        (first_name.strip(), last_name.strip(), email.strip().lower(), phone.strip() or None, department.strip() or None, role))
                     st.success(f"User {first_name} {last_name} added!")
                     st.rerun()
                 except Exception:
@@ -56,18 +44,14 @@ if search:
     params = [f"%{search}%"] * 4
 
 users = run_query(f"SELECT * FROM users {where} ORDER BY last_name, first_name", params or None)
-st.markdown(
-    f'<p style="font-size:0.9rem;color:#6b7280">'
-    f'{icon_text("users", f"{len(users)} user(s)", 14, "#6b7280")}'
-    f'</p>', unsafe_allow_html=True)
-
+st.markdown(f'<p style="font-size:0.9rem;color:#6b7280">{icon_text("users", f"{len(users)} user(s)", 14, "#6b7280")}</p>', unsafe_allow_html=True)
 if not users:
     st.info("No users found.")
     st.stop()
 
 for u in users:
     with st.expander(f"{u['last_name']}, {u['first_name']} — {u['email']} · {u['role'].title()}"):
-        col_form, col_del = st.columns([4, 1])
+        col_form, col_del = st.columns([4,1])
         with col_form:
             with st.form(f"edit_user_{u['id']}"):
                 ec1, ec2 = st.columns(2)
@@ -78,8 +62,7 @@ for u in users:
                 with ec2:
                     e_last  = st.text_input("Last Name", value=u["last_name"])
                     e_phone = st.text_input("Phone", value=u["phone"] or "")
-                    e_role  = st.selectbox("Role", ["student","staff","faculty"],
-                                           index=["student","staff","faculty"].index(u["role"]))
+                    e_role  = st.selectbox("Role", ["student","staff","faculty"], index=["student","staff","faculty"].index(u["role"]))
                 if st.form_submit_button("Save Changes", type="primary"):
                     errors = []
                     if not e_first.strip(): errors.append("First name required.")
@@ -89,12 +72,8 @@ for u in users:
                         for e in errors: st.error(e)
                     else:
                         try:
-                            run_query("""
-                                UPDATE users SET first_name=%s,last_name=%s,email=%s,
-                                phone=%s,department=%s,role=%s WHERE id=%s
-                            """, (e_first.strip(), e_last.strip(), e_email.strip().lower(),
-                                  e_phone.strip() or None, e_dept.strip() or None,
-                                  e_role, u["id"]), fetch=False)
+                            run_query("UPDATE users SET first_name=%s,last_name=%s,email=%s,phone=%s,department=%s,role=%s WHERE id=%s",
+                                (e_first.strip(), e_last.strip(), e_email.strip().lower(), e_phone.strip() or None, e_dept.strip() or None, e_role, u["id"]), fetch=False)
                             st.success("Updated!")
                             st.rerun()
                         except Exception:

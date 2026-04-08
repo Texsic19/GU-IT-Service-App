@@ -1,15 +1,7 @@
 import streamlit as st
 import re
 from db import run_query, run_insert
-from auth import require_staff, logout_button, role_badge
 from icons import icon_header, icon_text
-from nav import apply_nav_visibility
-
-st.set_page_config(page_title="Manage Technicians", page_icon="🔧", layout="wide")
-require_staff()
-role_badge()
-logout_button()
-apply_nav_visibility()
 
 st.markdown(icon_header("wrench", "Manage Technicians", level=1), unsafe_allow_html=True)
 st.markdown('<p style="color:#6b7280;margin-top:0">Add and manage IT desk workers.</p>', unsafe_allow_html=True)
@@ -26,7 +18,6 @@ with st.expander("Add New Technician", expanded=False):
             last_name = st.text_input("Last Name *")
             phone     = st.text_input("Phone", placeholder="509-313-1000")
             is_active = st.checkbox("Active", value=True)
-
         if st.form_submit_button("Add Technician", type="primary"):
             errors = []
             if not first_name.strip(): errors.append("First name required.")
@@ -39,11 +30,8 @@ with st.expander("Add New Technician", expanded=False):
                 for e in errors: st.error(e)
             else:
                 try:
-                    run_insert("""
-                        INSERT INTO technicians (first_name,last_name,email,phone,specialization,is_active)
-                        VALUES (%s,%s,%s,%s,%s,%s) RETURNING id
-                    """, (first_name.strip(), last_name.strip(), email.strip().lower(),
-                          phone.strip() or None, specialization.strip() or None, is_active))
+                    run_insert("INSERT INTO technicians (first_name,last_name,email,phone,specialization,is_active) VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
+                        (first_name.strip(), last_name.strip(), email.strip().lower(), phone.strip() or None, specialization.strip() or None, is_active))
                     st.success(f"Technician {first_name} {last_name} added!")
                     st.rerun()
                 except Exception:
@@ -62,21 +50,13 @@ tech_stats = {r["assigned_tech_id"]: r for r in run_query("""
         COUNT(*) AS total_count
     FROM tickets WHERE assigned_tech_id IS NOT NULL GROUP BY assigned_tech_id
 """)}
-
-st.markdown(
-    f'<p style="font-size:0.9rem;color:#6b7280">'
-    f'{icon_text("wrench", f"{len(techs)} technician(s)", 14, "#6b7280")}'
-    f'</p>', unsafe_allow_html=True)
+st.markdown(f'<p style="font-size:0.9rem;color:#6b7280">{icon_text("wrench", f"{len(techs)} technician(s)", 14, "#6b7280")}</p>', unsafe_allow_html=True)
 
 for tc in techs:
     stats = tech_stats.get(tc["id"], {})
-    status_badge = "Active" if tc["is_active"] else "Inactive"
-    label = (f"{tc['last_name']}, {tc['first_name']} — "
-             f"{tc.get('specialization') or 'General IT'}  |  {status_badge}  |  "
-             f"{stats.get('open_count',0)} open / {stats.get('total_count',0)} total")
-
+    label = f"{tc['last_name']}, {tc['first_name']} — {tc.get('specialization') or 'General IT'}  |  {'Active' if tc['is_active'] else 'Inactive'}  |  {stats.get('open_count',0)} open / {stats.get('total_count',0)} total"
     with st.expander(label):
-        col_form, col_del = st.columns([4, 1])
+        col_form, col_del = st.columns([4,1])
         with col_form:
             with st.form(f"edit_tech_{tc['id']}"):
                 ec1, ec2 = st.columns(2)
@@ -97,12 +77,8 @@ for tc in techs:
                         for e in errors: st.error(e)
                     else:
                         try:
-                            run_query("""
-                                UPDATE technicians SET first_name=%s,last_name=%s,email=%s,
-                                phone=%s,specialization=%s,is_active=%s WHERE id=%s
-                            """, (e_first.strip(), e_last.strip(), e_email.strip().lower(),
-                                  e_phone.strip() or None, e_spec.strip() or None,
-                                  e_active, tc["id"]), fetch=False)
+                            run_query("UPDATE technicians SET first_name=%s,last_name=%s,email=%s,phone=%s,specialization=%s,is_active=%s WHERE id=%s",
+                                (e_first.strip(), e_last.strip(), e_email.strip().lower(), e_phone.strip() or None, e_spec.strip() or None, e_active, tc["id"]), fetch=False)
                             st.success("Updated!")
                             st.rerun()
                         except Exception:
