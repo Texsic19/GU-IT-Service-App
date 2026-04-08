@@ -1,18 +1,19 @@
 import streamlit as st
 from db import run_query, run_insert
 from auth import require_staff, logout_button, role_badge
+from icons import icon_header, icon_text
+from nav import apply_nav_visibility
 
 st.set_page_config(page_title="Manage Tags", page_icon="🏷️", layout="wide")
-
 require_staff()
 role_badge()
 logout_button()
+apply_nav_visibility()
 
-st.title("🏷️ Manage Tags")
-st.markdown("*Create and manage tags to label tickets.*")
+st.markdown(icon_header("tag", "Manage Tags", level=1), unsafe_allow_html=True)
+st.markdown('<p style="color:#6b7280;margin-top:0">Create and manage tags to label tickets.</p>', unsafe_allow_html=True)
 st.divider()
 
-# ── Add Tag ───────────────────────────────────────────────────
 with st.form("add_tag_form", clear_on_submit=True):
     c1, c2, c3 = st.columns([3, 2, 1])
     with c1:
@@ -37,15 +38,16 @@ with st.form("add_tag_form", clear_on_submit=True):
             except Exception:
                 st.error("Tag name already exists.")
 
-# ── Tag list ──────────────────────────────────────────────────
 tags = run_query("""
     SELECT t.*, COUNT(tt.ticket_id) AS usage_count
-    FROM tags t
-    LEFT JOIN ticket_tags tt ON t.id = tt.tag_id
+    FROM tags t LEFT JOIN ticket_tags tt ON t.id = tt.tag_id
     GROUP BY t.id ORDER BY t.name
 """)
 
-st.markdown(f"**{len(tags)} tag(s)**")
+st.markdown(
+    f'<p style="font-size:0.9rem;color:#6b7280">'
+    f'{icon_text("tag", f"{len(tags)} tag(s)", 14, "#6b7280")}'
+    f'</p>', unsafe_allow_html=True)
 
 cols = st.columns(3)
 for i, tag in enumerate(tags):
@@ -54,21 +56,20 @@ for i, tag in enumerate(tags):
             tc1, tc2 = st.columns([3, 1])
             with tc1:
                 st.markdown(
-                    f'<span style="background:{tag["color"]};color:white;padding:4px 12px;'
-                    f'border-radius:12px;font-size:1em">#{tag["name"]}</span>  '
-                    f'<small>({tag["usage_count"]} tickets)</small>',
-                    unsafe_allow_html=True
-                )
+                    f'<span style="background:{tag["color"]};color:white;padding:4px 14px;'
+                    f'border-radius:20px;font-size:0.9rem;font-weight:500">#{tag["name"]}</span>'
+                    f'<span style="color:#9ca3af;font-size:0.8rem;margin-left:8px">'
+                    f'{tag["usage_count"]} ticket(s)</span>',
+                    unsafe_allow_html=True)
             with tc2:
-                if st.button("🗑️", key=f"del_tag_{tag['id']}", help="Delete tag"):
+                if st.button("Delete", key=f"del_tag_{tag['id']}"):
                     st.session_state[f"confirm_del_tag_{tag['id']}"] = True
-
             if st.session_state.get(f"confirm_del_tag_{tag['id']}"):
                 st.warning("Delete this tag?")
                 cc1, cc2 = st.columns(2)
                 with cc1:
                     if st.button("Yes", key=f"yes_tag_{tag['id']}", type="primary"):
-                        run_query("DELETE FROM tags WHERE id = %s", (tag["id"],), fetch=False)
+                        run_query("DELETE FROM tags WHERE id=%s", (tag["id"],), fetch=False)
                         st.rerun()
                 with cc2:
                     if st.button("No", key=f"no_tag_{tag['id']}"):

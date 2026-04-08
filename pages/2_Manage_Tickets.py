@@ -1,26 +1,29 @@
 import streamlit as st
 import pandas as pd
-from db import run_query, run_insert
+from db import run_query
 from auth import require_staff, logout_button, role_badge
+from icons import icon, icon_text, icon_header
+from nav import apply_nav_visibility
 
 st.set_page_config(page_title="Manage Tickets", page_icon="🗂️", layout="wide")
-
 require_staff()
 role_badge()
 logout_button()
+apply_nav_visibility()
 
-st.title("🗂️ Manage Tickets")
-st.markdown("*IT Staff View — Search, filter, assign, and update ticket status.*")
+st.markdown(icon_header("list-filter", "Manage Tickets", level=1), unsafe_allow_html=True)
+st.markdown('<p style="color:#6b7280;margin-top:0">IT Staff View — Search, filter, assign, and update ticket status.</p>', unsafe_allow_html=True)
 st.divider()
 
-# ── Filters ──────────────────────────────────────────────────
-with st.expander("🔍 Search & Filter", expanded=True):
+# ── Filters ───────────────────────────────────────────────────
+with st.expander("Search & Filter", expanded=True):
     fc1, fc2, fc3, fc4 = st.columns(4)
     with fc1:
-        search = st.text_input("Search by title or description", placeholder="e.g. wifi, password...")
+        search = st.text_input("Search", placeholder="Title or description...")
     with fc2:
-        filter_status = st.multiselect("Status", ["Open", "In Progress", "Resolved", "Closed"],
-                                       default=["Open", "In Progress"])
+        filter_status = st.multiselect("Status",
+            ["Open", "In Progress", "Resolved", "Closed"],
+            default=["Open", "In Progress"])
     with fc3:
         filter_priority = st.multiselect("Priority", ["Critical", "High", "Medium", "Low"])
     with fc4:
@@ -28,21 +31,19 @@ with st.expander("🔍 Search & Filter", expanded=True):
             ["Network", "Hardware", "Software", "Account/Access",
              "AV Equipment", "Email", "Printing", "General"])
 
-# ── Build query ───────────────────────────────────────────────
-where_clauses = []
-params = []
-
+# ── Query ─────────────────────────────────────────────────────
+where_clauses, params = [], []
 if search:
     where_clauses.append("(t.title ILIKE %s OR t.description ILIKE %s)")
     params += [f"%{search}%", f"%{search}%"]
 if filter_status:
-    where_clauses.append(f"t.status = ANY(%s)")
+    where_clauses.append("t.status = ANY(%s)")
     params.append(filter_status)
 if filter_priority:
-    where_clauses.append(f"t.priority = ANY(%s)")
+    where_clauses.append("t.priority = ANY(%s)")
     params.append(filter_priority)
 if filter_category:
-    where_clauses.append(f"t.category = ANY(%s)")
+    where_clauses.append("t.category = ANY(%s)")
     params.append(filter_category)
 
 where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
@@ -50,17 +51,12 @@ where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 tickets = run_query(f"""
     SELECT
         t.id, t.title, t.category, t.priority, t.status,
-        COALESCE(
-            NULLIF(TRIM(u.first_name || ' ' || u.last_name), ''),
-            NULLIF(TRIM(t.submitter_name), ''),
-            'Unknown'
-        ) AS submitter,
+        COALESCE(NULLIF(TRIM(t.submitter_name), ''), 'Unknown') AS submitter,
         COALESCE(tech.first_name || ' ' || tech.last_name, 'Unassigned') AS technician,
         t.ai_categorized,
         t.created_at::date AS submitted,
         t.location
     FROM tickets t
-    LEFT JOIN users u ON t.submitter_id = u.id
     LEFT JOIN technicians tech ON t.assigned_tech_id = tech.id
     {where_sql}
     ORDER BY
@@ -69,33 +65,58 @@ tickets = run_query(f"""
         t.created_at DESC
 """, params if params else None)
 
-st.markdown(f"**{len(tickets)} ticket(s) found**")
+st.markdown(
+    f'<p style="font-size:0.9rem;color:#6b7280">'
+    f'{icon_text("ticket", f"{len(tickets)} ticket(s) found", 14, "#6b7280")}'
+    f'</p>',
+    unsafe_allow_html=True
+)
 
 if not tickets:
     st.info("No tickets match your filters.")
     st.stop()
 
-# ── Ticket rows ───────────────────────────────────────────────
-PRIORITY_COLORS = {"Critical": "🔴", "High": "🟠", "Medium": "🟡", "Low": "🟢"}
-STATUS_COLORS   = {"Open": "🔵", "In Progress": "🟣", "Resolved": "✅", "Closed": "⬛"}
+# ── Priority / status icon maps ───────────────────────────────
+PRIORITY_ICON  = {"Critical": ("alert-triangle", "#dc2626"), "High": ("zap", "#d97706"),
+                  "Medium": ("info", "#2563eb"), "Low": ("check-circle", "#16a34a")}
+STATUS_ICON    = {"Open": ("circle-dot", "#ca8a04"), "In Progress": ("clock", "#7c3aed"),
+                  "Resolved": ("check-circle", "#16a34a"), "Closed": ("x-circle", "#6b7280")}
+CATEGORY_ICON  = {
+    "Network": "wifi", "Hardware": "cpu", "Software": "monitor",
+    "Account/Access": "key", "AV Equipment": "tv", "Email": "mail",
+    "Printing": "printer", "General": "wrench"
+}
 
 for t in tickets:
-    p_icon = PRIORITY_COLORS.get(t["priority"], "⚪")
-    s_icon = STATUS_COLORS.get(t["status"], "⚪")
-    ai_badge = " 🤖" if t["ai_categorized"] else ""
-    loc_str  = f" · 📍 {t['location']}" if t["location"] else ""
+    p_ico, p_col = PRIORITY_ICON.get(t["priority"], ("circle-dot", "#6b7280"))
+    s_ico, s_col = STATUS_ICON.get(t["status"],    ("circle-dot", "#6b7280"))
+    c_ico        = CATEGORY_ICON.get(t["category"], "wrench")
+    ai_badge     = " 🤖" if t["ai_categorized"] else ""
+    loc_str      = f" · {t['location']}" if t["location"] else ""
 
-    with st.expander(
-        f"{p_icon} **#{t['id']}** — {t['title']}  |  {s_icon} {t['status']}  |  {t['category']}{ai_badge}{loc_str}"
-    ):
+    label = (
+        f"{t['priority']} #{t['id']} — {t['title']}  |  "
+        f"{t['status']}  |  {t['category']}{ai_badge}{loc_str}"
+    )
+
+    with st.expander(label):
         col_info, col_actions = st.columns([2, 1])
 
         with col_info:
-            st.markdown(f"**Submitter:** {t['submitter']}  \n"
-                        f"**Assigned To:** {t['technician']}  \n"
-                        f"**Priority:** {t['priority']}  \n"
-                        f"**Submitted:** {t['submitted']}")
-            if st.button("🔍 View Full Ticket", key=f"view_{t['id']}"):
+            st.markdown(
+                f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.9rem">'
+                f'<div>{icon_text("user", t["submitter"], 14)}</div>'
+                f'<div>{icon_text("wrench", t["technician"], 14)}</div>'
+                f'<div>{icon_text(p_ico, t["priority"], 14, p_col)}</div>'
+                f'<div>{icon_text("clock", str(t["submitted"]), 14)}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            if st.button(
+                f"View Full Ticket →",
+                key=f"view_{t['id']}"
+            ):
                 st.session_state["view_ticket_id"] = t["id"]
                 st.switch_page("pages/3_Ticket_Detail.py")
 
@@ -104,37 +125,33 @@ for t in tickets:
             tech_map = {"Unassigned": None}
             tech_map.update({tc["name"]: tc["id"] for tc in techs})
 
-            new_status = st.selectbox("Update Status", ["Open", "In Progress", "Resolved", "Closed"],
-                                      index=["Open", "In Progress", "Resolved", "Closed"].index(t["status"]),
-                                      key=f"status_{t['id']}")
-            new_tech = st.selectbox("Assign Technician", list(tech_map.keys()),
-                                    index=list(tech_map.keys()).index(t["technician"])
-                                          if t["technician"] in tech_map else 0,
-                                    key=f"tech_{t['id']}")
+            new_status = st.selectbox("Status",
+                ["Open", "In Progress", "Resolved", "Closed"],
+                index=["Open", "In Progress", "Resolved", "Closed"].index(t["status"]),
+                key=f"status_{t['id']}")
+            new_tech = st.selectbox("Assign To", list(tech_map.keys()),
+                index=list(tech_map.keys()).index(t["technician"])
+                      if t["technician"] in tech_map else 0,
+                key=f"tech_{t['id']}")
 
-            if st.button("💾 Save Changes", key=f"save_{t['id']}", type="primary"):
+            if st.button("Save Changes", key=f"save_{t['id']}", type="primary"):
                 resolved_update = "resolved_at = NOW()," if new_status == "Resolved" else ""
                 run_query(f"""
-                    UPDATE tickets SET
-                        status = %s,
-                        assigned_tech_id = %s,
-                        {resolved_update}
-                        updated_at = NOW()
-                    WHERE id = %s
+                    UPDATE tickets SET status=%s, assigned_tech_id=%s,
+                    {resolved_update} updated_at=NOW() WHERE id=%s
                 """, (new_status, tech_map[new_tech], t["id"]), fetch=False)
-                st.success("✅ Updated!")
+                st.success("Updated!")
                 st.rerun()
 
-            if st.button("🗑️ Delete Ticket", key=f"del_{t['id']}"):
+            if st.button("Delete Ticket", key=f"del_{t['id']}"):
                 st.session_state[f"confirm_del_{t['id']}"] = True
 
             if st.session_state.get(f"confirm_del_{t['id']}"):
-                st.warning("⚠️ Are you sure? This cannot be undone.")
+                st.warning("Are you sure? This cannot be undone.")
                 cc1, cc2 = st.columns(2)
                 with cc1:
                     if st.button("Yes, Delete", key=f"yes_del_{t['id']}", type="primary"):
-                        run_query("DELETE FROM tickets WHERE id = %s", (t["id"],), fetch=False)
-                        st.success("Deleted.")
+                        run_query("DELETE FROM tickets WHERE id=%s", (t["id"],), fetch=False)
                         st.rerun()
                 with cc2:
                     if st.button("Cancel", key=f"no_del_{t['id']}"):

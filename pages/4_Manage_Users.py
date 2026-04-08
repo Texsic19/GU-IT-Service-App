@@ -2,74 +2,72 @@ import streamlit as st
 import re
 from db import run_query, run_insert
 from auth import require_staff, logout_button, role_badge
+from icons import icon_header, icon_text
+from nav import apply_nav_visibility
 
 st.set_page_config(page_title="Manage Users", page_icon="👥", layout="wide")
-
 require_staff()
 role_badge()
 logout_button()
+apply_nav_visibility()
 
-st.title("👥 Manage Users")
-st.markdown("*Add and manage students, staff, and faculty who can submit tickets.*")
+st.markdown(icon_header("users", "Manage Users", level=1), unsafe_allow_html=True)
+st.markdown('<p style="color:#6b7280;margin-top:0">Add and manage students, staff, and faculty.</p>', unsafe_allow_html=True)
 st.divider()
 
-# ── Add User Form ─────────────────────────────────────────────
-with st.expander("➕ Add New User", expanded=False):
+with st.expander("Add New User", expanded=False):
     with st.form("add_user_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
         with c1:
             first_name = st.text_input("First Name *")
-            email = st.text_input("Email *", placeholder="username@zagmail.gonzaga.edu")
+            email      = st.text_input("Email *", placeholder="username@zagmail.gonzaga.edu")
             department = st.text_input("Department", placeholder="e.g. Computer Science")
         with c2:
             last_name = st.text_input("Last Name *")
-            phone = st.text_input("Phone", placeholder="509-555-0100")
-            role = st.selectbox("Role *", ["student", "staff", "faculty"])
+            phone     = st.text_input("Phone", placeholder="509-555-0100")
+            role      = st.selectbox("Role *", ["student", "staff", "faculty"])
 
         if st.form_submit_button("Add User", type="primary"):
             errors = []
-            if not first_name.strip(): errors.append("First name is required.")
-            if not last_name.strip():  errors.append("Last name is required.")
-            if not email.strip():      errors.append("Email is required.")
+            if not first_name.strip(): errors.append("First name required.")
+            if not last_name.strip():  errors.append("Last name required.")
+            if not email.strip():      errors.append("Email required.")
             elif not re.match(r"[^@]+@[^@]+\.[^@]+", email): errors.append("Invalid email format.")
-            if phone and not re.match(r"^\d{3}[-.\s]?\d{3}[-.\s]?\d{4}$", phone.replace(" ", "")):
-                errors.append("Phone must be 10 digits (e.g. 509-313-1000).")
-
+            if phone and not re.match(r"^\d{3}[-.\s]?\d{3}[-.\s]?\d{4}$", phone.replace(" ","")):
+                errors.append("Phone must be 10 digits.")
             if errors:
                 for e in errors: st.error(e)
             else:
                 try:
                     run_insert("""
-                        INSERT INTO users (first_name, last_name, email, phone, department, role)
-                        VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+                        INSERT INTO users (first_name,last_name,email,phone,department,role)
+                        VALUES (%s,%s,%s,%s,%s,%s) RETURNING id
                     """, (first_name.strip(), last_name.strip(), email.strip().lower(),
                           phone.strip() or None, department.strip() or None, role))
-                    st.success(f"✅ User {first_name} {last_name} added!")
+                    st.success(f"User {first_name} {last_name} added!")
                     st.rerun()
                 except Exception:
-                    st.error("Email already exists in the system.")
+                    st.error("Email already exists.")
 
-# ── Search ────────────────────────────────────────────────────
-search = st.text_input("🔍 Search users", placeholder="Name, email, or department...")
-
-where = ""
-params = []
+search = st.text_input("Search users", placeholder="Name, email, or department...")
+where, params = "", []
 if search:
     where = "WHERE first_name ILIKE %s OR last_name ILIKE %s OR email ILIKE %s OR department ILIKE %s"
     params = [f"%{search}%"] * 4
 
 users = run_query(f"SELECT * FROM users {where} ORDER BY last_name, first_name", params or None)
-st.markdown(f"**{len(users)} user(s)**")
+st.markdown(
+    f'<p style="font-size:0.9rem;color:#6b7280">'
+    f'{icon_text("users", f"{len(users)} user(s)", 14, "#6b7280")}'
+    f'</p>', unsafe_allow_html=True)
 
 if not users:
     st.info("No users found.")
     st.stop()
 
-# ── User Table with Edit/Delete ───────────────────────────────
 for u in users:
-    with st.expander(f"**{u['last_name']}, {u['first_name']}** — {u['email']} · {u['role'].title()}"):
+    with st.expander(f"{u['last_name']}, {u['first_name']} — {u['email']} · {u['role'].title()}"):
         col_form, col_del = st.columns([4, 1])
-
         with col_form:
             with st.form(f"edit_user_{u['id']}"):
                 ec1, ec2 = st.columns(2)
@@ -80,9 +78,9 @@ for u in users:
                 with ec2:
                     e_last  = st.text_input("Last Name", value=u["last_name"])
                     e_phone = st.text_input("Phone", value=u["phone"] or "")
-                    e_role  = st.selectbox("Role", ["student", "staff", "faculty"],
-                                           index=["student", "staff", "faculty"].index(u["role"]))
-                if st.form_submit_button("💾 Save Changes", type="primary"):
+                    e_role  = st.selectbox("Role", ["student","staff","faculty"],
+                                           index=["student","staff","faculty"].index(u["role"]))
+                if st.form_submit_button("Save Changes", type="primary"):
                     errors = []
                     if not e_first.strip(): errors.append("First name required.")
                     if not e_last.strip():  errors.append("Last name required.")
@@ -92,25 +90,27 @@ for u in users:
                     else:
                         try:
                             run_query("""
-                                UPDATE users SET first_name=%s, last_name=%s, email=%s,
-                                phone=%s, department=%s, role=%s WHERE id=%s
+                                UPDATE users SET first_name=%s,last_name=%s,email=%s,
+                                phone=%s,department=%s,role=%s WHERE id=%s
                             """, (e_first.strip(), e_last.strip(), e_email.strip().lower(),
-                                  e_phone.strip() or None, e_dept.strip() or None, e_role, u["id"]),
-                                fetch=False)
+                                  e_phone.strip() or None, e_dept.strip() or None,
+                                  e_role, u["id"]), fetch=False)
                             st.success("Updated!")
                             st.rerun()
                         except Exception:
                             st.error("Email already taken.")
-
         with col_del:
             st.markdown("###")
-            if st.button("🗑️ Delete", key=f"del_user_{u['id']}"):
+            if st.button("Delete", key=f"del_user_{u['id']}"):
                 st.session_state[f"confirm_del_user_{u['id']}"] = True
             if st.session_state.get(f"confirm_del_user_{u['id']}"):
                 st.warning("Delete this user?")
-                if st.button("Confirm", key=f"confirm_user_{u['id']}", type="primary"):
-                    run_query("DELETE FROM users WHERE id = %s", (u["id"],), fetch=False)
-                    st.rerun()
-                if st.button("Cancel", key=f"cancel_user_{u['id']}"):
-                    st.session_state[f"confirm_del_user_{u['id']}"] = False
-                    st.rerun()
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Confirm", key=f"confirm_user_{u['id']}", type="primary"):
+                        run_query("DELETE FROM users WHERE id=%s", (u["id"],), fetch=False)
+                        st.rerun()
+                with c2:
+                    if st.button("Cancel", key=f"cancel_user_{u['id']}"):
+                        st.session_state[f"confirm_del_user_{u['id']}"] = False
+                        st.rerun()

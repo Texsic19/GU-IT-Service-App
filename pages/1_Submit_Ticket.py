@@ -1,51 +1,64 @@
 import streamlit as st
+import re
 from db import run_query, run_insert
 from ai_utils import ai_categorize_ticket
-from auth import logout_button, role_badge
+from auth import logout_button, role_badge, require_login
+from icons import icon, icon_text, icon_header
+from nav import apply_nav_visibility
 
 st.set_page_config(page_title="Submit a Ticket", page_icon="📝", layout="wide")
 
-# ── Auth gate ─────────────────────────────────────────────────
-if not st.session_state.get("logged_in"):
-    st.warning("Please log in first.")
-    st.page_link("Home.py", label="← Back to Login")
-    st.stop()
-
+require_login()
 role_badge()
 logout_button()
+apply_nav_visibility()
 
-st.title("📝 Submit a Support Ticket")
-st.markdown("Fill out the form below. Our AI will automatically categorize and prioritize your ticket.")
+st.markdown(icon_header("send", "Submit a Support Ticket", level=1), unsafe_allow_html=True)
+st.markdown(
+    f'<p style="color:#6b7280;margin-top:0">'
+    f'{icon_text("sparkles", "Our AI will automatically categorize and prioritize your ticket.", 14, "#6b7280")}'
+    f'</p>',
+    unsafe_allow_html=True
+)
 st.divider()
 
 with st.form("submit_ticket_form", clear_on_submit=True):
-    st.subheader("Your Information")
+    st.markdown(icon_header("user", "Your Information", level=3), unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
         submitter_name = st.text_input("Your Full Name *", placeholder="e.g. Alex Zamora")
     with col2:
         submitter_email = st.text_input("Your GU Email *", placeholder="username@zagmail.gonzaga.edu")
 
-    st.subheader("Ticket Details")
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.markdown(icon_header("ticket", "Ticket Details", level=3), unsafe_allow_html=True)
+
     col3, col4 = st.columns(2)
     with col3:
         title    = st.text_input("Issue Title *", placeholder="e.g. Cannot connect to campus WiFi")
         location = st.text_input("Location", placeholder="e.g. Herak 204, Library 3rd floor")
     with col4:
-        st.markdown("**AI will auto-detect category & priority** 🤖")
+        st.markdown(
+            f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;'
+            f'padding:10px 14px;font-size:0.85rem;color:#166534;margin-bottom:8px">'
+            f'{icon_text("bot", "AI will auto-detect category & priority", 14, "#166534")}'
+            f'</div>',
+            unsafe_allow_html=True
+        )
         manual_category = st.selectbox("Category (optional override)",
             ["Auto-detect 🤖", "Network", "Hardware", "Software",
              "Account/Access", "AV Equipment", "Email", "Printing", "General"])
         manual_priority = st.selectbox("Priority (optional override)",
             ["Auto-detect 🤖", "Low", "Medium", "High", "Critical"])
 
-    description = st.text_area("Describe your issue *", height=150,
-        placeholder="Describe the problem in detail. Include what you were doing, any error messages, and what you've already tried.")
+    description = st.text_area(
+        "Describe your issue *", height=150,
+        placeholder="Describe the problem in detail. Include what you were doing, any error messages, and what you've already tried."
+    )
 
-    submitted = st.form_submit_button("🚀 Submit Ticket", use_container_width=True, type="primary")
+    submitted = st.form_submit_button("Submit Ticket", use_container_width=True, type="primary")
 
 if submitted:
-    import re
     errors = []
     if not submitter_name.strip():
         errors.append("Your name is required.")
@@ -56,25 +69,22 @@ if submitted:
     if not title.strip():
         errors.append("Issue title is required.")
     if not description.strip() or len(description.strip()) < 20:
-        errors.append("Please provide more detail in the description (at least 20 characters).")
+        errors.append("Please provide more detail (at least 20 characters).")
 
     if errors:
         for e in errors:
             st.error(e)
     else:
-        with st.spinner("🤖 AI is analyzing your ticket..."):
+        with st.spinner("AI is analyzing your ticket..."):
             if manual_category == "Auto-detect 🤖" or manual_priority == "Auto-detect 🤖":
-                ai_result     = ai_categorize_ticket(title, description)
-                category      = ai_result.get("category", "General") if manual_category == "Auto-detect 🤖" else manual_category
-                priority      = ai_result.get("priority", "Medium")  if manual_priority == "Auto-detect 🤖" else manual_priority
+                ai_result      = ai_categorize_ticket(title, description)
+                category       = ai_result.get("category", "General") if manual_category == "Auto-detect 🤖" else manual_category
+                priority       = ai_result.get("priority", "Medium")  if manual_priority == "Auto-detect 🤖" else manual_priority
                 ai_categorized = True
             else:
                 category       = manual_category
                 priority       = manual_priority
                 ai_categorized = False
-
-            # AI fix is generated only from Ticket Detail (staff) — avoids Cloud timeouts
-            # and keeps this submit path fast.
 
             ticket_id = run_insert("""
                 INSERT INTO tickets
@@ -88,12 +98,30 @@ if submitted:
                   None, ai_categorized,
                   location.strip() if location else None))
 
-        st.success(f"✅ Ticket #{ticket_id} submitted successfully!")
-        col_a, col_b, col_c = st.columns(3)
-        col_a.info(f"**Category:** {category} {'🤖' if ai_categorized else ''}")
-        col_b.info(f"**Priority:** {priority} {'🤖' if ai_categorized else ''}")
-        col_c.info("**Status:** Open")
+        # Success banner
+        st.markdown(
+            f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:12px;'
+            f'padding:1.25rem;margin-bottom:1rem">'
+            f'{icon_text("check-circle", f"Ticket #{ticket_id} submitted successfully!", 20, "#15803d")}'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
-        with st.expander("🤖 AI-Suggested Fix (for IT staff reference)", expanded=False):
-            st.caption("IT staff can generate an AI fix from the ticket detail page after triage.")
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            st.markdown(
+                f'<div style="background:#eff6ff;border-radius:8px;padding:12px;font-size:0.9rem">'
+                f'{icon_text("tag", f"Category: {category}", 14, "#1d4ed8")} {"🤖" if ai_categorized else ""}'
+                f'</div>', unsafe_allow_html=True)
+        with col_b:
+            st.markdown(
+                f'<div style="background:#fefce8;border-radius:8px;padding:12px;font-size:0.9rem">'
+                f'{icon_text("zap", f"Priority: {priority}", 14, "#854d0e")} {"🤖" if ai_categorized else ""}'
+                f'</div>', unsafe_allow_html=True)
+        with col_c:
+            st.markdown(
+                f'<div style="background:#f0fdf4;border-radius:8px;padding:12px;font-size:0.9rem">'
+                f'{icon_text("clock", "Status: Open", 14, "#15803d")}'
+                f'</div>', unsafe_allow_html=True)
+
         st.balloons()
