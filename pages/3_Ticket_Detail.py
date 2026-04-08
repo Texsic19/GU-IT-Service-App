@@ -117,11 +117,14 @@ with left_col:
 with right_col:
     # ── AI Suggested Fix ──────────────────────────────────────
     st.subheader("🤖 AI-Suggested Fix")
-    st.caption("*Powered by Google Gemini — similar to Nessus vulnerability guidance*")
+    st.caption("*Powered by Google Gemini*")
 
-    if t["ai_suggested_fix"]:
+    existing_fix = (t.get("ai_suggested_fix") or "").strip()
+    has_real_fix = bool(existing_fix) and not existing_fix.lower().startswith("ai suggestion unavailable")
+
+    if has_real_fix:
         with st.container(border=True):
-            st.markdown(t["ai_suggested_fix"])
+            st.markdown(existing_fix)
 
         if st.button("🔄 Regenerate AI Fix", use_container_width=True):
             with st.spinner("Generating new suggestion..."):
@@ -130,7 +133,7 @@ with right_col:
                           (new_fix, ticket_id), fetch=False)
             st.rerun()
     else:
-        st.info("No AI suggestion yet.")
+        st.info("No AI suggestion yet. Click Generate to create one.")
         if st.button("🤖 Generate AI Fix", use_container_width=True, type="primary"):
             with st.spinner("Generating suggestion..."):
                 new_fix = ai_suggest_fix(t["title"], t["description"], t["category"])
