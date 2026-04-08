@@ -1,8 +1,14 @@
 import streamlit as st
 import re
 from db import run_query, run_insert
+from auth import require_staff, logout_button, role_badge
 
 st.set_page_config(page_title="Manage Technicians", page_icon="🔧", layout="wide")
+
+require_staff()
+role_badge()
+logout_button()
+
 st.title("🔧 Manage Technicians")
 st.markdown("*Add and manage IT desk workers.*")
 st.divider()

@@ -1,7 +1,13 @@
 import streamlit as st
 from db import run_query, run_insert
+from auth import require_staff, logout_button, role_badge
 
 st.set_page_config(page_title="Manage Tags", page_icon="🏷️", layout="wide")
+
+require_staff()
+role_badge()
+logout_button()
+
 st.title("🏷️ Manage Tags")
 st.markdown("*Create and manage tags to label tickets.*")
 st.divider()

@@ -1,12 +1,24 @@
 import streamlit as st
+from auth import login_page, logout_button, role_badge
 from db import run_query
 import pandas as pd
+
+# ── Auth gate ─────────────────────────────────────────────────
+if not st.session_state.get("logged_in"):
+    login_page()
+    st.stop()
+
+if st.session_state.get("role") == "student":
+    st.switch_page("pages/1_Submit_Ticket.py")
 
 st.set_page_config(
     page_title="GU IT Help Desk",
     page_icon="🔧",
     layout="wide"
 )
+
+role_badge()
+logout_button()
 
 # ── Header ──────────────────────────────────────────────────
 col_logo, col_title = st.columns([1, 8])
@@ -84,11 +96,10 @@ recent = run_query("""
         t.category,
         t.priority,
         t.status,
-        u.first_name || ' ' || u.last_name AS submitter,
+        COALESCE(t.submitter_name, 'Unknown') AS submitter,
         COALESCE(tech.first_name || ' ' || tech.last_name, 'Unassigned') AS technician,
         t.created_at::date AS submitted
     FROM tickets t
-    LEFT JOIN users u ON t.submitter_id = u.id
     LEFT JOIN technicians tech ON t.assigned_tech_id = tech.id
     ORDER BY t.created_at DESC
     LIMIT 15

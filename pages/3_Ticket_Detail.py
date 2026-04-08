@@ -1,8 +1,14 @@
 import streamlit as st
 from db import run_query, run_insert
 from ai_utils import ai_suggest_fix
+from auth import require_staff, logout_button, role_badge
 
 st.set_page_config(page_title="Ticket Detail", page_icon="🔍", layout="wide")
+
+require_staff()
+role_badge()
+logout_button()
+
 
 # ── Get ticket ID ─────────────────────────────────────────────
 ticket_id = st.session_state.get("view_ticket_id")
