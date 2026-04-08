@@ -1,6 +1,6 @@
 import streamlit as st
 from db import run_query, run_insert
-from ai_utils import ai_categorize_ticket, ai_suggest_fix
+from ai_utils import ai_categorize_ticket
 from auth import logout_button, role_badge
 
 st.set_page_config(page_title="Submit a Ticket", page_icon="📝", layout="wide")
@@ -73,7 +73,8 @@ if submitted:
                 priority       = manual_priority
                 ai_categorized = False
 
-            ai_fix = ai_suggest_fix(title, description, category)
+            # AI fix is generated only from Ticket Detail (staff) — avoids Cloud timeouts
+            # and keeps this submit path fast.
 
             ticket_id = run_insert("""
                 INSERT INTO tickets
@@ -84,7 +85,7 @@ if submitted:
                 RETURNING id
             """, (title.strip(), description.strip(), priority, category,
                   submitter_name.strip(), submitter_email.strip().lower(),
-                  ai_fix, ai_categorized,
+                  None, ai_categorized,
                   location.strip() if location else None))
 
         st.success(f"✅ Ticket #{ticket_id} submitted successfully!")
@@ -94,5 +95,5 @@ if submitted:
         col_c.info("**Status:** Open")
 
         with st.expander("🤖 AI-Suggested Fix (for IT staff reference)", expanded=False):
-            st.markdown(ai_fix)
+            st.caption("IT staff can generate an AI fix from the ticket detail page after triage.")
         st.balloons()

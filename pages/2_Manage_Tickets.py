@@ -50,7 +50,11 @@ where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 tickets = run_query(f"""
     SELECT
         t.id, t.title, t.category, t.priority, t.status,
-        u.first_name || ' ' || u.last_name AS submitter,
+        COALESCE(
+            NULLIF(TRIM(u.first_name || ' ' || u.last_name), ''),
+            NULLIF(TRIM(t.submitter_name), ''),
+            'Unknown'
+        ) AS submitter,
         COALESCE(tech.first_name || ' ' || tech.last_name, 'Unassigned') AS technician,
         t.ai_categorized,
         t.created_at::date AS submitted,

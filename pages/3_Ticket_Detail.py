@@ -25,8 +25,11 @@ ticket_id = int(ticket_id)
 rows = run_query("""
     SELECT
         t.*,
-        u.first_name || ' ' || u.last_name AS submitter_name,
-        u.email AS submitter_email,
+        COALESCE(
+            NULLIF(TRIM(u.first_name || ' ' || u.last_name), ''),
+            NULLIF(TRIM(t.submitter_name), '')
+        ) AS submitter_name,
+        COALESCE(u.email, t.submitter_email) AS submitter_email,
         u.phone AS submitter_phone,
         u.department,
         COALESCE(tech.first_name || ' ' || tech.last_name, 'Unassigned') AS technician_name,
@@ -70,9 +73,11 @@ with left_col:
 
     st.divider()
     st.subheader("👤 Submitter Information")
+    sub_name = t.get("submitter_name") or "—"
+    sub_email = t.get("submitter_email") or "—"
     st.markdown(
-        f"**Name:** {t['submitter_name']}  \n"
-        f"**Email:** {t['submitter_email']}  \n"
+        f"**Name:** {sub_name}  \n"
+        f"**Email:** {sub_email}  \n"
         f"**Phone:** {t.get('submitter_phone') or 'N/A'}  \n"
         f"**Department:** {t.get('department') or 'N/A'}"
     )
