@@ -93,7 +93,7 @@ for t in tickets:
                         f"**Submitted:** {t['submitted']}")
             if st.button("🔍 View Full Ticket", key=f"view_{t['id']}"):
                 st.session_state["view_ticket_id"] = t["id"]
-                st.switch_page("pages/2_Ticket_Detail.py")
+                st.switch_page("pages/3_Ticket_Detail.py")
 
         with col_actions:
             techs = run_query("SELECT id, first_name || ' ' || last_name AS name FROM technicians WHERE is_active = TRUE ORDER BY last_name")

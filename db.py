@@ -1,8 +1,31 @@
+import os
+
 import psycopg2
 import streamlit as st
 
+
+def _get_db_url() -> str:
+    s = st.secrets
+    try:
+        return s["database"]["DB_URL"]
+    except (KeyError, TypeError):
+        pass
+    try:
+        return s["DB_URL"]
+    except KeyError:
+        pass
+    url = os.environ.get("DATABASE_URL") or os.environ.get("DB_URL")
+    if url:
+        return url
+    raise KeyError(
+        'database / DB_URL — add [database] with DB_URL to Secrets '
+        "(see .streamlit/secrets.toml.example). On Streamlit Cloud, paste TOML "
+        "under App settings → Secrets; deployed apps do not read repo secrets.toml."
+    )
+
+
 def get_connection():
-    return psycopg2.connect(st.secrets["database"]["DB_URL"])
+    return psycopg2.connect(_get_db_url())
 
 def run_query(sql, params=None, fetch=True):
     conn = get_connection()
