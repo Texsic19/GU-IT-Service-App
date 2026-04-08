@@ -116,7 +116,7 @@ if recent:
         return colors.get(val, "")
 
     st.dataframe(
-        df.style.applymap(color_priority, subset=["priority"]),
+        df.style.map(color_priority, subset=["priority"]),
         use_container_width=True,
         hide_index=True
     )
