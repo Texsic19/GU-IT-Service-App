@@ -1,19 +1,36 @@
 import streamlit as st
 import urllib.request
+import urllib.error
 import json
+import os
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+_DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+_GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+
+def _get_gemini_model() -> str:
+    try:
+        return st.secrets["gemini"]["MODEL"]
+    except KeyError:
+        return os.environ.get("GEMINI_MODEL", _DEFAULT_GEMINI_MODEL)
 
 def _call_gemini(prompt: str) -> str:
     api_key = st.secrets["gemini"]["GEMINI_API_KEY"]
-    url = f"{GEMINI_URL}?key={api_key}"
+    model = _get_gemini_model()
+    url = f"{_GEMINI_API_BASE}/{model}:generateContent?key={api_key}"
     payload = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.3, "maxOutputTokens": 512}
     }).encode("utf-8")
     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        data = json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        try:
+            detail = e.read().decode("utf-8")
+        except Exception:
+            detail = str(e)
+        raise RuntimeError(f"Gemini API error {e.code}: {detail}") from e
     return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
