@@ -19,7 +19,7 @@ def _call_gemini(prompt: str) -> str:
     url = f"{_GEMINI_API_BASE}/{model}:generateContent?key={api_key}"
     payload = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 512}
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1024}
     }).encode("utf-8")
     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
     try:
@@ -32,6 +32,19 @@ def _call_gemini(prompt: str) -> str:
             detail = str(e)
         raise RuntimeError(f"Gemini API error {e.code}: {detail}") from e
     return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+
+def _extract_json_object(text: str) -> dict:
+    """Best-effort extraction when the model wraps JSON in extra text."""
+    cleaned = text.replace("```json", "").replace("```", "").strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            return json.loads(cleaned[start : end + 1])
+        raise
 
 
 def ai_categorize_ticket(title: str, description: str) -> dict:
@@ -53,9 +66,7 @@ Rules:
 Respond ONLY with valid JSON, no explanation, no markdown.
 Example: {{"category": "Network", "priority": "High"}}"""
     try:
-        result = _call_gemini(prompt)
-        result = result.replace("```json", "").replace("```", "").strip()
-        return json.loads(result)
+        return _extract_json_object(_call_gemini(prompt))
     except Exception:
         return {"category": "General", "priority": "Medium"}
 
@@ -69,17 +80,42 @@ Title: {title}
 Category: {category}
 Description: {description}
 
-Provide a clear, step-by-step resolution guide for the IT technician who will handle this ticket.
-Format your response as numbered steps. Be specific and practical.
-Include:
-1. Immediate diagnostic steps
-2. Most likely root causes
-3. Step-by-step fix instructions
-4. How to verify the issue is resolved
-5. Any preventive advice
-
-Keep it concise but thorough. Use plain language."""
+Respond ONLY with valid JSON matching this schema:
+{{
+  "diagnostics": ["step", "step"],
+  "likely_root_causes": ["cause", "cause"],
+  "fix_steps": ["step", "step", "step"],
+  "verification": ["check", "check"],
+  "prevention": ["advice", "advice"]
+}}
+No markdown. No extra keys.
+Keep each item under 14 words."""
     try:
-        return _call_gemini(prompt)
+        result = _extract_json_object(_call_gemini(prompt))
+        diagnostics = result.get("diagnostics", [])
+        causes = result.get("likely_root_causes", [])
+        fixes = result.get("fix_steps", [])
+        verification = result.get("verification", [])
+        prevention = result.get("prevention", [])
+
+        sections = [
+            ("Immediate diagnostics", diagnostics),
+            ("Likely root causes", causes),
+            ("Fix steps", fixes),
+            ("Verification", verification),
+            ("Prevention", prevention),
+        ]
+        lines = []
+        for header, items in sections:
+            if not isinstance(items, list):
+                continue
+            cleaned_items = [str(i).strip() for i in items if str(i).strip()]
+            if not cleaned_items:
+                continue
+            lines.append(f"### {header}")
+            for idx, item in enumerate(cleaned_items, 1):
+                lines.append(f"{idx}. {item}")
+            lines.append("")
+        return "\n".join(lines).strip()
     except Exception:
         return "AI suggestion unavailable. Please diagnose manually."
